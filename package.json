@@ -1,0 +1,47 @@
+{
+  "name": "custom-components",
+  "displayName": "Custom Components",
+  "description": "Slice UI components, generate web components, and compare variants.",
+  "version": "0.0.1",
+  "publisher": "custom-components-team",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:customComponents.sliceSelection",
+    "onCommand:customComponents.openVariantStudio",
+    "onCommand:customComponents.saveToLibrary",
+    "onCommand:customComponents.quickInsert"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "customComponents.sliceSelection",
+        "title": "CustomComponents: Slice Selection"
+      },
+      {
+        "command": "customComponents.openVariantStudio",
+        "title": "CustomComponents: Open Variant Studio"
+      },
+      {
+        "command": "customComponents.saveToLibrary",
+        "title": "CustomComponents: Save to Library"
+      },
+      {
+        "command": "customComponents.quickInsert",
+        "title": "CustomComponents: Quick Insert from Library"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/vscode": "^1.90.0"
+  }
+}

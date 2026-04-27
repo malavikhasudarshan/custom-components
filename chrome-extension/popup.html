@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Components</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 12px; width: 380px; }
+    h2 { margin-top: 0; font-size: 16px; }
+    label { display: block; font-size: 12px; margin: 8px 0 4px; }
+    textarea, input { width: 100%; box-sizing: border-box; }
+    textarea { min-height: 90px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button { margin-top: 10px; margin-right: 6px; }
+    #preview { margin-top: 10px; border: 1px dashed #888; border-radius: 8px; padding: 10px; min-height: 60px; }
+    #status { margin-top: 8px; font-size: 12px; color: #444; }
+    #variants { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .variant-card { border: 1px solid #888; border-radius: 8px; padding: 6px; cursor: grab; font-size: 11px; }
+    #dropZone { margin-top: 10px; border: 2px dashed #777; border-radius: 8px; padding: 10px; }
+    #snippet { margin-top: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h2>Custom Components Studio</h2>
+
+  <label for="tagName">Custom element tag name</label>
+  <input id="tagName" value="demo-card" />
+
+  <label for="htmlSlice">HTML slice (supports inline style + class rules in &lt;style&gt;)</label>
+  <textarea id="htmlSlice" placeholder="Paste a component slice, e.g. <style>.card{color:teal}</style><div class='card'>Hello</div>"></textarea>
+
+  <div class="row">
+    <div>
+      <label for="color">color</label>
+      <input id="color" placeholder="blue" />
+    </div>
+    <div>
+      <label for="fontSize">font-size</label>
+      <input id="fontSize" placeholder="16px" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="borderRadius">border-radius</label>
+      <input id="borderRadius" placeholder="8px" />
+    </div>
+    <div>
+      <label for="text">text</label>
+      <input id="text" placeholder="Hello" />
+    </div>
+  </div>
+
+  <button id="previewBtn">Preview</button>
+  <button id="makeVariantBtn">Make Draggable Variant Card</button>
+  <button id="downloadBtn">Download JS</button>
+  <button id="copyBtn">Copy JS</button>
+
+  <div id="preview"></div>
+  <div id="variants"></div>
+  <div id="dropZone">Drop variant card here to generate insert snippet</div>
+  <div id="snippet"></div>
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Custom Components Variant Studio",
+  "version": "0.0.1",
+  "description": "Generate reusable Web Components and compare UI variants from HTML slices.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Custom Components"
+  },
+  "permissions": ["downloads"]
+}

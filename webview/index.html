@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Variant Studio</title>
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .card { border: 1px solid #555; border-radius: 8px; padding: 8px; }
+    input { width: 100%; margin-bottom: 8px; }
+    #preview { border: 1px dashed #777; padding: 12px; min-height: 80px; }
+    button { margin-right: 8px; margin-top: 6px; }
+    #variants { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .variant-card { border: 1px solid #777; border-radius: 8px; padding: 8px; cursor: grab; min-width: 100px; }
+    #drop-zone { margin-top: 10px; border: 2px dashed #666; border-radius: 8px; padding: 12px; }
+    #snippet { margin-top: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h2>Variant Studio</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Attributes</h3>
+      <label>Color <input id="color" placeholder="e.g. blue" /></label>
+      <label>Font Size <input id="font-size" placeholder="e.g. 16px" /></label>
+      <label>Border Radius <input id="border-radius" placeholder="e.g. 12px" /></label>
+      <label>Text <input id="text" placeholder="override text" /></label>
+      <button id="preview-btn">Preview</button>
+      <button id="make-variant-btn">Make Draggable Variant Card</button>
+    </div>
+    <div class="card">
+      <h3>Preview</h3>
+      <div id="preview"></div>
+      <div id="variants"></div>
+      <div id="drop-zone">Drop variant card here to generate and insert snippet</div>
+      <div id="snippet"></div>
+    </div>
+  </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+    const previewBox = document.getElementById('preview');
+    const variantsBox = document.getElementById('variants');
+    const dropZone = document.getElementById('drop-zone');
+    const snippetBox = document.getElementById('snippet');
+
+    function attrsFromInputs() {
+      return {
+        color: document.getElementById('color').value,
+        'font-size': document.getElementById('font-size').value,
+        'border-radius': document.getElementById('border-radius').value,
+        text: document.getElementById('text').value,
+      };
+    }
+
+    function renderSnippet(attrs, tagName) {
+      const attrString = Object.entries(attrs)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}="${v}"`)
+        .join(' ');
+      return `<${tagName}${attrString ? ` ${attrString}` : ''}></${tagName}>`;
+    }
+
+    document.getElementById('preview-btn').addEventListener('click', () => {
+      vscode.postMessage({ type: 'preview', payload: attrsFromInputs() });
+    });
+
+    document.getElementById('make-variant-btn').addEventListener('click', () => {
+      const attrs = attrsFromInputs();
+      const card = document.createElement('div');
+      card.className = 'variant-card';
+      card.draggable = true;
+      card.textContent = Object.entries(attrs).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || 'default variant';
+      card.dataset.attrs = JSON.stringify(attrs);
+      card.addEventListener('dragstart', (event) => {
+        event.dataTransfer.setData('application/json', card.dataset.attrs || '{}');
+      });
+      variantsBox.appendChild(card);
+    });
+
+    dropZone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+    });
+
+    dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const raw = event.dataTransfer.getData('application/json') || '{}';
+      const attrs = JSON.parse(raw);
+      const tagName = (window.currentTemplate && window.currentTemplate.tagName) || 'custom-sliced-component';
+      snippetBox.textContent = renderSnippet(attrs, tagName);
+      vscode.postMessage({ type: 'insertSnippet', payload: attrs });
+    });
+
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (message.type === 'state') {
+        window.currentTemplate = message.payload || null;
+        if (!message.payload) {
+          previewBox.textContent = 'No sliced component yet. Run CustomComponents: Slice Selection first.';
+        }
+      }
+      if (message.type === 'previewResult') {
+        previewBox.innerHTML = message.payload.html;
+      }
+    });
+
+    vscode.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>
