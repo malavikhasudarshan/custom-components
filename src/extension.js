@@ -6,7 +6,38 @@ const { saveLibraryItem, listLibraryItems } = require('./library/store');
 
 const state = {
   lastSlice: null,
-  lastTemplate: null
+  lastTemplate: null,
+  lastEditorUri: null,
+  lastSelectionEnd: null,
+  async insertVariantSnippet(vscode, attrs) {
+    const tagName = this.lastTemplate ? this.lastTemplate.tagName : 'custom-sliced-component';
+    const attrString = Object.entries(attrs || {})
+      .filter(([, value]) => value)
+      .map(([key, value]) => `${key}="${value}"`)
+      .join(' ');
+
+    const snippet = `<${tagName}${attrString ? ` ${attrString}` : ''}></${tagName}>`;
+    const targetUri = this.lastEditorUri;
+    const targetPosition = this.lastSelectionEnd;
+
+    if (targetUri && targetPosition) {
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(targetUri, targetPosition, snippet);
+      await vscode.workspace.applyEdit(edit);
+      return true;
+    }
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return false;
+    }
+
+    await editor.edit((editBuilder) => {
+      editBuilder.insert(editor.selection.active, snippet);
+    });
+
+    return true;
+  }
 };
 
 function getWorkspacePath() {
@@ -41,6 +72,8 @@ async function sliceSelectionCommand() {
   const template = toWebComponent(slice, { tagName: tag });
   state.lastSlice = slice;
   state.lastTemplate = template;
+  state.lastEditorUri = editor.document.uri;
+  state.lastSelectionEnd = editor.selection.end;
 
   vscode.window.showInformationMessage(
     `Slice extracted (${slice.warnings.length} warning(s)). Open Variant Studio to compare variants.`

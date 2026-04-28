@@ -13,6 +13,7 @@
     button { margin-right: 8px; margin-top: 6px; }
     #variants { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
     .variant-card { border: 1px solid #777; border-radius: 8px; padding: 8px; cursor: grab; min-width: 100px; }
+    .variant-card:focus { outline: 2px solid #4f46e5; outline-offset: 2px; }
     #drop-zone { margin-top: 10px; border: 2px dashed #666; border-radius: 8px; padding: 12px; }
     #snippet { margin-top: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
   </style>
@@ -62,6 +63,12 @@
       return `<${tagName}${attrString ? ` ${attrString}` : ''}></${tagName}>`;
     }
 
+    function insertVariant(attrs) {
+      const tagName = (window.currentTemplate && window.currentTemplate.tagName) || 'custom-sliced-component';
+      snippetBox.textContent = renderSnippet(attrs, tagName);
+      vscode.postMessage({ type: 'insertSnippet', payload: attrs });
+    }
+
     document.getElementById('preview-btn').addEventListener('click', () => {
       vscode.postMessage({ type: 'preview', payload: attrsFromInputs() });
     });
@@ -71,10 +78,20 @@
       const card = document.createElement('div');
       card.className = 'variant-card';
       card.draggable = true;
+      card.tabIndex = 0;
+      card.title = 'Click to insert, or drag into the drop zone';
       card.textContent = Object.entries(attrs).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || 'default variant';
       card.dataset.attrs = JSON.stringify(attrs);
       card.addEventListener('dragstart', (event) => {
+        event.dataTransfer.effectAllowed = 'copy';
         event.dataTransfer.setData('application/json', card.dataset.attrs || '{}');
+      });
+      card.addEventListener('click', () => insertVariant(attrs));
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          insertVariant(attrs);
+        }
       });
       variantsBox.appendChild(card);
     });
@@ -87,9 +104,7 @@
       event.preventDefault();
       const raw = event.dataTransfer.getData('application/json') || '{}';
       const attrs = JSON.parse(raw);
-      const tagName = (window.currentTemplate && window.currentTemplate.tagName) || 'custom-sliced-component';
-      snippetBox.textContent = renderSnippet(attrs, tagName);
-      vscode.postMessage({ type: 'insertSnippet', payload: attrs });
+      insertVariant(attrs);
     });
 
     window.addEventListener('message', (event) => {

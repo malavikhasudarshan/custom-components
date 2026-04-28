@@ -1,9 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
-function getWebviewHtml(extensionUri) {
+function getWebviewHtml(extensionUri, webview) {
   const htmlPath = path.join(extensionUri.fsPath, 'webview', 'index.html');
-  return fs.readFileSync(htmlPath, 'utf8');
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  
+  // Replace relative paths with webview URIs (not needed for inline HTML, but kept for future use)
+  return html;
 }
 
 function applyVariant(html, attrs) {
@@ -48,6 +51,7 @@ function openVariantStudio(vscode, context, state) {
     { enableScripts: true }
   );
 
+  // Set HTML content from file
   panel.webview.html = getWebviewHtml(context.extensionUri, panel.webview);
 
   panel.webview.onDidReceiveMessage(async (message) => {
@@ -65,23 +69,11 @@ function openVariantStudio(vscode, context, state) {
     }
 
     if (message.type === 'insertSnippet') {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showWarningMessage('Open an editor before inserting snippets.');
+      const inserted = await state.insertVariantSnippet(vscode, message.payload || {});
+      if (!inserted) {
+        vscode.window.showWarningMessage('Run Slice Selection first, then open Variant Studio again.');
         return;
       }
-
-      const tagName = state.lastTemplate ? state.lastTemplate.tagName : 'custom-sliced-component';
-      const attrs = message.payload || {};
-      const attrString = Object.entries(attrs)
-        .filter(([, value]) => value)
-        .map(([key, value]) => `${key}="${value}"`)
-        .join(' ');
-
-      const snippet = `<${tagName}${attrString ? ` ${attrString}` : ''}></${tagName}>`;
-      await editor.edit((editBuilder) => {
-        editBuilder.insert(editor.selection.active, snippet);
-      });
 
       vscode.window.showInformationMessage('Variant snippet inserted at cursor.');
     }
