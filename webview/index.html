@@ -14,8 +14,14 @@
     #variants { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
     .variant-card { border: 1px solid #777; border-radius: 8px; padding: 8px; cursor: grab; min-width: 100px; }
     .variant-card:focus { outline: 2px solid #4f46e5; outline-offset: 2px; }
+    .variant-card-preview { width: 100%; height: 60px; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; color: white; font-weight: 500; font-size: 12px; overflow: hidden; }
+    .variant-card-label { font-size: 11px; color: #666; }
     #drop-zone { margin-top: 10px; border: 2px dashed #666; border-radius: 8px; padding: 12px; }
     #snippet { margin-top: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    #comparison { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .comparison-item { border: 1px solid #ccc; border-radius: 6px; padding: 8px; background: #f9f9f9; }
+    .comparison-item h4 { margin: 0 0 8px 0; font-size: 12px; }
+    .comparison-preview { border: 1px dashed #ccc; padding: 8px; min-height: 60px; background: white; }
   </style>
 </head>
 <body>
@@ -23,12 +29,15 @@
   <div class="grid">
     <div class="card">
       <h3>Attributes</h3>
-      <label>Color <input id="color" placeholder="e.g. blue" /></label>
-      <label>Font Size <input id="font-size" placeholder="e.g. 16px" /></label>
-      <label>Border Radius <input id="border-radius" placeholder="e.g. 12px" /></label>
-      <label>Text <input id="text" placeholder="override text" /></label>
+      <div id="attributes-container">
+        <label>Color <input id="color" placeholder="e.g. blue" data-prop-input="color" /></label>
+        <label>Font Size <input id="font-size" placeholder="e.g. 16px" data-prop-input="font-size" /></label>
+        <label>Border Radius <input id="border-radius" placeholder="e.g. 12px" data-prop-input="border-radius" /></label>
+        <label>Text <input id="text" placeholder="override text" data-prop-input="text" /></label>
+      </div>
       <button id="preview-btn">Preview</button>
       <button id="make-variant-btn">Make Draggable Variant Card</button>
+      <button id="compare-btn" style="margin-top: 6px; background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">+ Add to Comparison</button>
     </div>
     <div class="card">
       <h3>Preview</h3>
@@ -39,20 +48,34 @@
     </div>
   </div>
 
+  <div id="comparison-section" style="margin-top: 16px; display: none;">
+    <h3>Side-by-side Comparison</h3>
+    <button id="clear-comparison" style="margin-bottom: 8px; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Clear Comparison</button>
+    <div id="comparison"></div>
+  </div>
+
   <script>
     const vscode = acquireVsCodeApi();
     const previewBox = document.getElementById('preview');
     const variantsBox = document.getElementById('variants');
     const dropZone = document.getElementById('drop-zone');
     const snippetBox = document.getElementById('snippet');
+    const comparisonBox = document.getElementById('comparison');
+    const comparisonSection = document.getElementById('comparison-section');
+
+    let currentTemplate = null;
+    let comparisonVariants = [];
 
     function attrsFromInputs() {
-      return {
-        color: document.getElementById('color').value,
-        'font-size': document.getElementById('font-size').value,
-        'border-radius': document.getElementById('border-radius').value,
-        text: document.getElementById('text').value,
-      };
+      const attrs = {};
+      document.querySelectorAll('[data-prop-input]').forEach(input => {
+        const propName = input.getAttribute('data-prop-input');
+        const value = input.value.trim();
+        if (value) {
+          attrs[propName] = value;
+        }
+      });
+      return attrs;
     }
 
     function renderSnippet(attrs, tagName) {
@@ -64,35 +87,162 @@
     }
 
     function insertVariant(attrs) {
-      const tagName = (window.currentTemplate && window.currentTemplate.tagName) || 'custom-sliced-component';
+      const tagName = (currentTemplate && currentTemplate.tagName) || 'custom-sliced-component';
       snippetBox.textContent = renderSnippet(attrs, tagName);
       vscode.postMessage({ type: 'insertSnippet', payload: attrs });
+    }
+
+    // Dynamically build inputs for all detected properties
+    function renderPropertyInputs(template) {
+      const attributesContainer = document.getElementById('attributes-container');
+      attributesContainer.innerHTML = '';
+
+      if (!template || !template.schema || !template.schema.attributes) {
+        attributesContainer.innerHTML = '<p>No properties detected.</p>';
+        return;
+      }
+
+      template.schema.attributes.forEach(attr => {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = `e.g. ${attr.defaultValue || 'value'}`;
+        input.setAttribute('data-prop-input', attr.name);
+        
+        label.textContent = `${attr.name} `;
+        label.appendChild(input);
+        attributesContainer.appendChild(label);
+      });
+    }
+
+    function updateComparison() {
+      if (comparisonVariants.length === 0) {
+        comparisonSection.style.display = 'none';
+      } else {
+        comparisonSection.style.display = 'block';
+        comparisonBox.innerHTML = '';
+        comparisonVariants.forEach((variant, idx) => {
+          const item = document.createElement('div');
+          item.className = 'comparison-item';
+          const title = document.createElement('h4');
+          title.textContent = `Variant ${idx + 1}`;
+          const preview = document.createElement('div');
+          preview.className = 'comparison-preview';
+          preview.innerHTML = variant.preview;
+          const code = document.createElement('small');
+          code.style.display = 'block';
+          code.style.marginTop = '8px';
+          code.style.fontFamily = 'monospace';
+          code.style.fontSize = '10px';
+          code.style.overflow = 'hidden';
+          code.style.textOverflow = 'ellipsis';
+          code.style.whiteSpace = 'nowrap';
+          code.textContent = Object.entries(variant.attrs)
+            .filter(([, v]) => v)
+            .map(([k, v]) => `${k}="${v}"`)
+            .join(' ');
+          item.appendChild(title);
+          item.appendChild(preview);
+          item.appendChild(code);
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = '✕ Remove';
+          removeBtn.style.marginTop = '6px';
+          removeBtn.style.width = '100%';
+          removeBtn.style.padding = '4px';
+          removeBtn.style.background = '#ef4444';
+          removeBtn.style.color = 'white';
+          removeBtn.style.border = 'none';
+          removeBtn.style.borderRadius = '4px';
+          removeBtn.style.cursor = 'pointer';
+          removeBtn.onclick = () => {
+            comparisonVariants.splice(idx, 1);
+            updateComparison();
+          };
+          item.appendChild(removeBtn);
+          comparisonBox.appendChild(item);
+        });
+      }
     }
 
     document.getElementById('preview-btn').addEventListener('click', () => {
       vscode.postMessage({ type: 'preview', payload: attrsFromInputs() });
     });
 
+    document.getElementById('compare-btn').addEventListener('click', () => {
+      const attrs = attrsFromInputs();
+      const tagName = (currentTemplate && currentTemplate.tagName) || 'custom-sliced-component';
+      // Create a temporary preview
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = previewBox.innerHTML;
+      comparisonVariants.push({
+        attrs,
+        preview: previewBox.innerHTML
+      });
+      updateComparison();
+    });
+
+    document.getElementById('clear-comparison').addEventListener('click', () => {
+      comparisonVariants = [];
+      updateComparison();
+    });
+
     document.getElementById('make-variant-btn').addEventListener('click', () => {
       const attrs = attrsFromInputs();
+      
+      // Safely create the card object with proper escaping
+      const safeAttrs = {};
+      Object.entries(attrs).forEach(([k, v]) => {
+        // Escape special characters in values
+        safeAttrs[k] = String(v).replace(/"/g, '\\"').replace(/\n/g, '\\n');
+      });
+      
       const card = document.createElement('div');
       card.className = 'variant-card';
       card.draggable = true;
       card.tabIndex = 0;
-      card.title = 'Click to insert, or drag into the drop zone';
-      card.textContent = Object.entries(attrs).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || 'default variant';
+      
+      // Create a visual preview of the variant
+      const previewDiv = document.createElement('div');
+      previewDiv.className = 'variant-card-preview';
+      
+      // Generate a preview style based on the attributes
+      let previewStyle = '';
+      Object.entries(safeAttrs).forEach(([k, v]) => {
+        if (k !== 'text' && v) {
+          previewStyle += `${k}: ${v}; `;
+        }
+      });
+      
+      previewDiv.style.cssText = previewStyle || 'background: #ccc;';
+      previewDiv.textContent = safeAttrs.text || 'Preview';
+      
+      // Create the label showing which properties changed
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'variant-card-label';
+      const changedPropsCount = Object.values(safeAttrs).filter(v => v).length;
+      labelDiv.textContent = `${changedPropsCount} properties`;
+      
+      card.appendChild(previewDiv);
+      card.appendChild(labelDiv);
+      
+      // Store the original (unescaped) attributes for insertion
       card.dataset.attrs = JSON.stringify(attrs);
+      card.title = `Click to insert: ${Object.entries(attrs).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(', ')}`;
+      
       card.addEventListener('dragstart', (event) => {
         event.dataTransfer.effectAllowed = 'copy';
         event.dataTransfer.setData('application/json', card.dataset.attrs || '{}');
       });
+      
       card.addEventListener('click', () => insertVariant(attrs));
+      
       card.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           insertVariant(attrs);
         }
       });
+      
       variantsBox.appendChild(card);
     });
 
@@ -110,9 +260,11 @@
     window.addEventListener('message', (event) => {
       const message = event.data;
       if (message.type === 'state') {
-        window.currentTemplate = message.payload || null;
+        currentTemplate = message.payload || null;
         if (!message.payload) {
           previewBox.textContent = 'No sliced component yet. Run CustomComponents: Slice Selection first.';
+        } else {
+          renderPropertyInputs(message.payload);
         }
       }
       if (message.type === 'previewResult') {

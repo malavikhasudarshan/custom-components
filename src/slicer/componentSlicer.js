@@ -1,19 +1,126 @@
-function findQuotedValue(text, key) {
-  const exact = new RegExp(`${key}\\s*=\\s*["']([^"']+)["']`, 'i').exec(text);
-  if (exact) return exact[1];
+function toKebabCase(name) {
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
 
-  const styleObj = new RegExp(`${key.replace('-', '')}\\s*:\\s*["']?([^,"'}]+)`, 'i').exec(text);
-  if (styleObj) return styleObj[1].trim();
+function splitTopLevel(text, separator) {
+  const parts = [];
+  let current = '';
+  let depth = 0;
+  let quote = '';
 
-  const inlineCss = new RegExp(`${key}\\s*:\\s*([^;"']+)`, 'i').exec(text);
-  if (inlineCss) return inlineCss[1].trim();
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
 
-  return undefined;
+    if (quote) {
+      current += char;
+      if (char === quote && text[index - 1] !== '\\') {
+        quote = '';
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      current += char;
+      continue;
+    }
+
+    if (char === ')' || char === ']' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      current += char;
+      continue;
+    }
+
+    if (char === separator && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function parseInlineStyleObject(content) {
+  const props = [];
+  const entries = splitTopLevel(content, ',');
+
+  entries.forEach((entry) => {
+    const colonIndex = entry.indexOf(':');
+    if (colonIndex === -1) return;
+
+    const rawName = entry.slice(0, colonIndex).trim();
+    const rawValue = entry.slice(colonIndex + 1).trim();
+    if (!rawName || !rawValue) return;
+
+    const name = toKebabCase(rawName);
+    const value = rawValue.replace(/^['"]/, '').replace(/['"]$/, '').trim();
+    if (name && value) {
+      props.push({ name, value });
+    }
+  });
+
+  return props;
+}
+
+function parseCssDeclarations(cssText) {
+  const props = [];
+  const declarationRegex = /([a-zA-Z-]+)\s*:\s*([^;{}]+)/g;
+  let match;
+
+  while ((match = declarationRegex.exec(cssText)) !== null) {
+    const name = toKebabCase(match[1].trim());
+    const value = match[2].trim().replace(/^["']/, '').replace(/["']$/, '').trim();
+    if (name && value) {
+      props.push({ name, value });
+    }
+  }
+
+  return props;
+}
+
+function findAllQuotedValues(text) {
+  const props = [];
+  const seenNames = new Set();
+
+  const inlineStyleRegex = /\bstyle\s*=\s*\{\{([\s\S]*?)\}\}/g;
+  let inlineMatch;
+  while ((inlineMatch = inlineStyleRegex.exec(text)) !== null) {
+    parseInlineStyleObject(inlineMatch[1]).forEach((prop) => {
+      if (!seenNames.has(prop.name)) {
+        seenNames.add(prop.name);
+        props.push(prop);
+      }
+    });
+  }
+
+  parseCssDeclarations(text).forEach((prop) => {
+    if (!seenNames.has(prop.name)) {
+      seenNames.add(prop.name);
+      props.push(prop);
+    }
+  });
+
+  return props;
 }
 
 function detectTextContent(htmlFragment) {
-  const noTags = htmlFragment.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  return noTags.length > 0 ? noTags : undefined;
+  // Remove style blocks first
+  let cleaned = htmlFragment.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  // Remove all HTML tags
+  cleaned = cleaned.replace(/<[^>]+>/g, ' ');
+  // Clean up whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 function extractReferencedClasses(htmlFragment) {
@@ -76,6 +183,7 @@ function component_slicer(source, begin_ln, end_ln) {
   const classNames = extractReferencedClasses(htmlFragment);
   const styleBlock = extractStyleBlock(source);
   const classRules = extractRulesForClasses(styleBlock, classNames);
+  const htmlWithoutStyleBlocks = htmlFragment.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
 
   if (classRules) {
     htmlFragment = `<style>\n${classRules}\n</style>\n${htmlFragment}`;
@@ -83,29 +191,34 @@ function component_slicer(source, begin_ln, end_ln) {
     warnings.push('Class names found, but no matching CSS rules were extracted from <style> block.');
   }
 
-  const styleBindings = [];
+  // Extract all style properties from the component
   const detectedProps = [];
+  const styleBindings = [];
+  const seenProps = new Set();
 
-  const color = findQuotedValue(htmlFragment, 'color');
-  if (color) {
-    styleBindings.push('color');
-    detectedProps.push({ name: 'color', type: 'string', defaultValue: color });
-  }
+  // Extract from class-based CSS rules
+  const classRuleProps = findAllQuotedValues(classRules || '');
+  classRuleProps.forEach(prop => {
+    if (!seenProps.has(prop.name)) {
+      seenProps.add(prop.name);
+      detectedProps.push({ name: prop.name, type: 'string', defaultValue: prop.value });
+      styleBindings.push(prop.name);
+    }
+  });
 
-  const fontSize = findQuotedValue(htmlFragment, 'font-size') || findQuotedValue(htmlFragment, 'fontSize');
-  if (fontSize) {
-    styleBindings.push('font-size');
-    detectedProps.push({ name: 'font-size', type: 'string', defaultValue: fontSize });
-  }
+  // Extract from inline styles
+  const inlineStyleProps = findAllQuotedValues(htmlWithoutStyleBlocks);
+  inlineStyleProps.forEach(prop => {
+    if (!seenProps.has(prop.name)) {
+      seenProps.add(prop.name);
+      detectedProps.push({ name: prop.name, type: 'string', defaultValue: prop.value });
+      styleBindings.push(prop.name);
+    }
+  });
 
-  const borderRadius = findQuotedValue(htmlFragment, 'border-radius') || findQuotedValue(htmlFragment, 'borderRadius');
-  if (borderRadius) {
-    styleBindings.push('border-radius');
-    detectedProps.push({ name: 'border-radius', type: 'string', defaultValue: borderRadius });
-  }
-
+  // Also detect text content as an editable prop
   const text = detectTextContent(htmlFragment);
-  if (text) {
+  if (text && !seenProps.has('text')) {
     detectedProps.push({ name: 'text', type: 'string', defaultValue: text });
   }
 

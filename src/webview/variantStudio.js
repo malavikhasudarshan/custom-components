@@ -12,33 +12,46 @@ function getWebviewHtml(extensionUri, webview) {
 function applyVariant(html, attrs) {
   let out = html;
 
-  if (attrs.color) {
-    if (/color\s*:[^;"']+/i.test(out)) {
-      out = out.replace(/(color\s*:\s*)([^;"']+)/i, `$1${attrs.color}`);
-    } else if (/style\s*=\s*["'][^"']*["']/i.test(out)) {
-      out = out.replace(/style\s*=\s*["']([^"']*)["']/i, (m, style) => `style="${style}; color: ${attrs.color}"`);
-    }
-  }
-
-  if (attrs['font-size']) {
-    if (/font-size\s*:[^;"']+/i.test(out)) {
-      out = out.replace(/(font-size\s*:\s*)([^;"']+)/i, `$1${attrs['font-size']}`);
-    } else if (/style\s*=\s*["'][^"']*["']/i.test(out)) {
-      out = out.replace(/style\s*=\s*["']([^"']*)["']/i, (m, style) => `style="${style}; font-size: ${attrs['font-size']}"`);
-    }
-  }
-
-  if (attrs['border-radius']) {
-    if (/border-radius\s*:[^;"']+/i.test(out)) {
-      out = out.replace(/(border-radius\s*:\s*)([^;"']+)/i, `$1${attrs['border-radius']}`);
-    } else if (/style\s*=\s*["'][^"']*["']/i.test(out)) {
-      out = out.replace(/style\s*=\s*["']([^"']*)["']/i, (m, style) => `style="${style}; border-radius: ${attrs['border-radius']}"`);
-    }
-  }
-
+  // Handle text replacement ONLY in the main content, not in <style> blocks
   if (attrs.text) {
-    out = out.replace(/>([^<]*)</, `>${attrs.text}<`);
+    // Remove style blocks temporarily to protect them
+    const styleBlocks = [];
+    out = out.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, (match) => {
+      styleBlocks.push(match);
+      return `__STYLE_PLACEHOLDER_${styleBlocks.length - 1}__`;
+    });
+    
+    // Replace text in the HTML (first text node only)
+    out = out.replace(/>([^<]+)</, `>${attrs.text}<`);
+    
+    // Restore style blocks
+    styleBlocks.forEach((block, idx) => {
+      out = out.replace(`__STYLE_PLACEHOLDER_${idx}__`, block);
+    });
   }
+
+  // Handle all CSS properties dynamically (but skip text)
+  Object.entries(attrs).forEach(([propName, propValue]) => {
+    if (!propValue || propName === 'text') return;
+
+    // Try to replace existing CSS property in style blocks
+    const cssRuleRegex = new RegExp(`(${propName}\\s*:\\s*)([^;]+)`, 'gi');
+    if (cssRuleRegex.test(out)) {
+      out = out.replace(cssRuleRegex, `$1${propValue}`);
+    } else {
+      // Try to update inline styles
+      const inlineStyleRegex = /style\s*=\s*["']([^"']*)["']/i;
+      if (inlineStyleRegex.test(out)) {
+        out = out.replace(inlineStyleRegex, (m, style) => {
+          if (new RegExp(`${propName}\\s*:`).test(style)) {
+            return m.replace(new RegExp(`${propName}\\s*:\\s*[^;]+`), `${propName}: ${propValue}`);
+          } else {
+            return `style="${style}; ${propName}: ${propValue}"`;
+          }
+        });
+      }
+    }
+  });
 
   return out;
 }
