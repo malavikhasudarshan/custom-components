@@ -9,20 +9,8 @@
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "outFiles": [
-        "${workspaceFolder}/out/**/*.js"
+        "${workspaceFolder}/src/**/*.js"
       ]
-    },
-    {
-      "name": "Run Tests",
-      "type": "node",
-      "request": "launch",
-      "program": "${workspaceFolder}/node_modules/.bin/_mocha",
-      "args": [
-        "--require",
-        "ts-node/register",
-        "test/**/*.test.js"
-      ],
-      "console": "integratedTerminal"
     }
   ]
 }

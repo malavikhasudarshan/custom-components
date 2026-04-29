@@ -13,6 +13,36 @@ function toClassName(tagName) {
     .join('');
 }
 
+function normalizeInputForPreview(html) {
+  let out = html;
+
+  // JSX -> HTML normalization for quick preview.
+  out = out.replace(/className=/g, 'class=');
+  out = out.replace(/<>/g, '').replace(/<\/>/g, '');
+
+  // style={{ color: "red", fontSize: "16px" }} -> style="color: red; font-size: 16px"
+  out = out.replace(/style=\{\{([\s\S]*?)\}\}/g, (_, styleObj) => {
+    const normalized = styleObj
+      .replace(/\n/g, ' ')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const m = part.match(/^([a-zA-Z-]+)\s*:\s*(.+)$/);
+        if (!m) return '';
+        const key = m[1].replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+        const rawValue = m[2].trim().replace(/^['"]|['"]$/g, '');
+        return `${key}: ${rawValue}`;
+      })
+      .filter(Boolean)
+      .join('; ');
+
+    return `style="${normalized}"`;
+  });
+
+  return out;
+}
+
 function getInputs() {
   return {
     tagName: document.getElementById('tagName').value.trim() || 'demo-card',
@@ -40,6 +70,8 @@ function applyVariant(html, attrs) {
       out = out.replace(/(color\s*:\s*)([^;"']+)/i, `$1${attrs.color}`);
     } else if (/style\s*=\s*["'][^"']*["']/i.test(out)) {
       out = out.replace(/style\s*=\s*["']([^"']*)["']/i, (m, style) => `style="${style}; color: ${attrs.color}"`);
+    } else {
+      out = out.replace(/<([a-zA-Z][^\s/>]*)/i, `<$1 style="color: ${attrs.color};"`);
     }
   }
 
@@ -129,8 +161,11 @@ function preview() {
     return;
   }
 
-  const output = applyVariant(htmlSlice, { color, fontSize, borderRadius, text });
-  document.getElementById('preview').innerHTML = output;
+  const normalized = normalizeInputForPreview(htmlSlice);
+  const output = applyVariant(normalized, { color, fontSize, borderRadius, text });
+  const previewFrame = document.getElementById('previewFrame');
+  const previewDoc = `<!doctype html><html><head><meta charset="UTF-8"></head><body>${output}</body></html>`;
+  previewFrame.srcdoc = previewDoc;
   setStatus('Preview updated.');
 }
 
