@@ -37,3 +37,19 @@ test('component_slicer warns on invalid ranges', () => {
   const result = component_slicer('<div>Test</div>', 3, 1);
   assert.equal(result.warnings.length > 0, true);
 });
+
+test('component_slicer extracts all CSS properties from class rules', () => {
+  const source = [
+    '<style>',
+    '.card { background-color: #3b82f6; color: white; padding: 20px; border-radius: 12px; font-size: 16px; }',
+    '</style>',
+    '<div class="card">Hello</div>'
+  ].join('\n');
+
+  const result = component_slicer(source, 4, 4);
+  console.log('Detected props:', JSON.stringify(result.detectedProps, null, 2));
+  assert.equal(result.detectedProps.length > 0, true);
+  assert.equal(result.detectedProps.some((p) => p.name === 'background-color'), true);
+  assert.equal(result.detectedProps.some((p) => p.name === 'color'), true);
+  assert.equal(result.detectedProps.some((p) => p.name === 'padding'), true);
+});
