@@ -1,7 +1,7 @@
 {
   "name": "custom-components",
   "displayName": "Custom Components",
-  "description": "Slice UI components, generate web components, and compare variants.",
+  "description": "Slice UI components (including large pasted or dropped HTML), generate web components, preview in isolation, and compare variants.",
   "version": "0.0.1",
   "publisher": "custom-components-team",
   "engines": {

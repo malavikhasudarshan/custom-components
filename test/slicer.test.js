@@ -1,6 +1,28 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { component_slicer } = require('../src/slicer/componentSlicer');
+const { component_slicer, slice_entire_source } = require('../src/slicer/componentSlicer');
+
+test('slice_entire_source matches slicing the full source string', () => {
+  const source = [
+    '<style>',
+    '.card { color: purple; border-radius: 12px; }',
+    '.other { color: gray; }',
+    '</style>',
+    '<div class="card">Hello</div>'
+  ].join('\n');
+
+  const whole = slice_entire_source(source);
+  const lines = source.split(/\r?\n/);
+  const byRange = component_slicer(source, 1, lines.length);
+  assert.equal(whole.htmlFragment, byRange.htmlFragment);
+  assert.equal(whole.detectedProps.length, byRange.detectedProps.length);
+});
+
+test('slice_entire_source returns empty result for blank input', () => {
+  const result = slice_entire_source('   ');
+  assert.equal(result.htmlFragment, '');
+  assert.equal(result.warnings.length > 0, true);
+});
 
 test('component_slicer extracts selected fragment and style props', () => {
   const source = [

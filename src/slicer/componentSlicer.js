@@ -230,6 +230,24 @@ function component_slicer(source, begin_ln, end_ln) {
   };
 }
 
+/**
+ * Slice a full HTML / JSX document (or large pasted fragment) without an editor line range.
+ * Used for drag-and-drop and paste flows for heavy components (e.g. site navigation).
+ */
+function slice_entire_source(source) {
+  if (!source || !String(source).trim()) {
+    return {
+      htmlFragment: '',
+      detectedProps: [],
+      styleBindings: [],
+      warnings: ['Empty input; nothing to slice.']
+    };
+  }
+  const lines = source.split(/\r?\n/);
+  return component_slicer(source, 1, lines.length);
+}
+
 module.exports = {
-  component_slicer
+  component_slicer,
+  slice_entire_source
 };

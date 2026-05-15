@@ -1,11 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "Custom Components Variant Studio",
-  "version": "0.0.1",
-  "description": "Generate reusable Web Components and compare UI variants from HTML slices.",
+  "name": "Custom Components — Web asset picker",
+  "version": "0.1.0",
+  "description": "Pick elements on public websites, capture HTML (optionally with portable CSS), preview variants, and export for reuse in VS Code or the browser.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "Custom Components"
   },
-  "permissions": ["downloads"]
+  "permissions": ["activeTab", "storage", "clipboardWrite", "downloads"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "pick-element": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Pick a component on this page (HTML capture)"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/picker.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
 }

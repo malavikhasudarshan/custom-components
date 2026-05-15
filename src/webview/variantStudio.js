@@ -1,5 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { slice_entire_source } = require('../slicer/componentSlicer');
+const { toWebComponent } = require('../transform/toWebComponent');
+
+const MAX_IMPORT_CHARS = 1_500_000;
 
 function getWebviewHtml(extensionUri, webview) {
   const htmlPath = path.join(extensionUri.fsPath, 'webview', 'index.html');
@@ -75,6 +79,65 @@ function openVariantStudio(vscode, context, state) {
       });
     }
 
+    if (message.type === 'importHtml') {
+      const raw = message.payload && message.payload.html;
+      if (typeof raw !== 'string') {
+        panel.webview.postMessage({
+          type: 'importResult',
+          payload: { ok: false, error: 'Expected HTML string in payload.' }
+        });
+        return;
+      }
+      if (raw.length > MAX_IMPORT_CHARS) {
+        panel.webview.postMessage({
+          type: 'importResult',
+          payload: {
+            ok: false,
+            error: `HTML is too large (${raw.length} chars). Max supported is ${MAX_IMPORT_CHARS}.`
+          }
+        });
+        return;
+      }
+
+      const slice = slice_entire_source(raw);
+      if (!slice.htmlFragment.trim()) {
+        panel.webview.postMessage({
+          type: 'importResult',
+          payload: { ok: false, error: slice.warnings[0] || 'Could not extract a component from that HTML.' }
+        });
+        return;
+      }
+
+      const tagInput =
+        (message.payload && message.payload.tagName) ||
+        (await vscode.window.showInputBox({
+          prompt: 'Tag name for generated web component (kebab-case).',
+          value: 'custom-sliced-component'
+        }));
+
+      if (!tagInput) {
+        panel.webview.postMessage({
+          type: 'importResult',
+          payload: { ok: false, error: 'Import cancelled (no tag name).' }
+        });
+        return;
+      }
+
+      const template = toWebComponent(slice, { tagName: tagInput });
+      state.lastSlice = slice;
+      state.lastTemplate = template;
+
+      panel.webview.postMessage({
+        type: 'importResult',
+        payload: { ok: true, warnings: slice.warnings, warningCount: slice.warnings.length }
+      });
+      panel.webview.postMessage({
+        type: 'state',
+        payload: state.lastTemplate
+      });
+      return;
+    }
+
     if (message.type === 'preview' && state.lastSlice) {
       const attrs = message.payload || {};
       const rendered = applyVariant(state.lastSlice.htmlFragment, attrs);
@@ -84,7 +147,7 @@ function openVariantStudio(vscode, context, state) {
     if (message.type === 'insertSnippet') {
       const inserted = await state.insertVariantSnippet(vscode, message.payload || {});
       if (!inserted) {
-        vscode.window.showWarningMessage('Run Slice Selection first, then open Variant Studio again.');
+        vscode.window.showWarningMessage('Slice or import a component first, then open Variant Studio again.');
         return;
       }
 

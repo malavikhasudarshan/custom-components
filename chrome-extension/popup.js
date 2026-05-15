@@ -15,12 +15,8 @@ function toClassName(tagName) {
 
 function normalizeInputForPreview(html) {
   let out = html;
-
-  // JSX -> HTML normalization for quick preview.
   out = out.replace(/className=/g, 'class=');
   out = out.replace(/<>/g, '').replace(/<\/>/g, '');
-
-  // style={{ color: "red", fontSize: "16px" }} -> style="color: red; font-size: 16px"
   out = out.replace(/style=\{\{([\s\S]*?)\}\}/g, (_, styleObj) => {
     const normalized = styleObj
       .replace(/\n/g, ' ')
@@ -36,10 +32,8 @@ function normalizeInputForPreview(html) {
       })
       .filter(Boolean)
       .join('; ');
-
     return `style="${normalized}"`;
   });
-
   return out;
 }
 
@@ -57,9 +51,10 @@ function getInputs() {
 function renderSnippet(tagName, attrs) {
   const attrString = Object.entries(attrs)
     .filter(([, value]) => value)
-    .map(([key, value]) => `${key}="${value}"`)
+    .map(([key, value]) => `${key}="${String(value).replace(/"/g, '&quot;')}"`)
     .join(' ');
-  return `<${toKebabCase(tagName)}${attrString ? ` ${attrString}` : ''}></${toKebabCase(tagName)}>`;
+  const tag = toKebabCase(tagName);
+  return `<${tag}${attrString ? ` ${attrString}` : ''}></${tag}>`;
 }
 
 function applyVariant(html, attrs) {
@@ -157,14 +152,14 @@ function setStatus(message) {
 function preview() {
   const { htmlSlice, color, fontSize, borderRadius, text } = getInputs();
   if (!htmlSlice) {
-    setStatus('Paste an HTML/CSS slice first.');
+    setStatus('Add an HTML slice first (pick on a page or paste).');
     return;
   }
 
   const normalized = normalizeInputForPreview(htmlSlice);
   const output = applyVariant(normalized, { color, fontSize, borderRadius, text });
   const previewFrame = document.getElementById('previewFrame');
-  const previewDoc = `<!doctype html><html><head><meta charset="UTF-8"></head><body>${output}</body></html>`;
+  const previewDoc = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">${output}</body></html>`;
   previewFrame.srcdoc = previewDoc;
   setStatus('Preview updated.');
 }
@@ -175,7 +170,11 @@ function addVariantCard() {
   const card = document.createElement('div');
   card.className = 'variant-card';
   card.draggable = true;
-  card.textContent = Object.entries(attrs).filter(([, value]) => value).map(([k, v]) => `${k}: ${v}`).join(', ') || 'default variant';
+  card.textContent =
+    Object.entries(attrs)
+      .filter(([, value]) => value)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(', ') || 'default variant';
   card.dataset.attrs = JSON.stringify(attrs);
   card.addEventListener('dragstart', (event) => {
     event.dataTransfer.setData('application/json', card.dataset.attrs || '{}');
@@ -187,7 +186,7 @@ function addVariantCard() {
 function downloadJS() {
   const { tagName, htmlSlice, color, fontSize, borderRadius, text } = getInputs();
   if (!htmlSlice) {
-    setStatus('Paste an HTML/CSS slice first.');
+    setStatus('Add an HTML slice first.');
     return;
   }
 
@@ -205,13 +204,103 @@ function downloadJS() {
 async function copyJS() {
   const { tagName, htmlSlice, color, fontSize, borderRadius, text } = getInputs();
   if (!htmlSlice) {
-    setStatus('Paste an HTML/CSS slice first.');
+    setStatus('Add an HTML slice first.');
     return;
   }
 
   const source = generateWebComponentSource(tagName, htmlSlice, { color, fontSize, borderRadius, text });
   await navigator.clipboard.writeText(source);
   setStatus('Component source copied to clipboard.');
+}
+
+async function persistHtmlSlice() {
+  const v = document.getElementById('htmlSlice').value;
+  await chrome.storage.local.set({ lastCaptureHtml: v });
+}
+
+async function loadFromStorage() {
+  const data = await chrome.storage.local.get(['lastCaptureHtml', 'lastCaptureUrl', 'lastCaptureAt', 'includePortableCss']);
+  if (typeof data.includePortableCss === 'boolean') {
+    document.getElementById('portableCss').checked = data.includePortableCss;
+  }
+  if (data.lastCaptureHtml) {
+    document.getElementById('htmlSlice').value = data.lastCaptureHtml;
+    const when = data.lastCaptureAt ? new Date(data.lastCaptureAt).toLocaleString() : '';
+    setStatus(when ? `Loaded last capture (${when}).` : 'Loaded last capture.');
+  }
+}
+
+async function pickOnActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    setStatus('No active tab.');
+    return;
+  }
+  const url = tab.url || '';
+  if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://')) {
+    setStatus('Open a normal http(s) page, then try again.');
+    return;
+  }
+
+  const includePortableCss = document.getElementById('portableCss').checked;
+  await chrome.storage.local.set({ includePortableCss });
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: 'START_PICK',
+      options: { includePortableCss }
+    });
+    setStatus('Picker active on the tab — hover, click to capture, Esc cancels.');
+  } catch {
+    setStatus(
+      'Could not reach the page script. Reload the tab after installing the extension, then try again.'
+    );
+  }
+}
+
+async function copyHtml() {
+  const { htmlSlice } = getInputs();
+  if (!htmlSlice) {
+    setStatus('Nothing to copy.');
+    return;
+  }
+  await navigator.clipboard.writeText(htmlSlice);
+  setStatus('HTML copied to clipboard.');
+}
+
+async function copyForCursor() {
+  const { htmlSlice } = getInputs();
+  if (!htmlSlice) {
+    setStatus('Nothing to copy.');
+    return;
+  }
+  const block = [
+    '<!-- Paste into Custom Components → Variant Studio "Import heavy components",',
+    '     or save as .html and drop onto the import zone. -->',
+    '',
+    htmlSlice.trim(),
+    ''
+  ].join('\n');
+  await navigator.clipboard.writeText(block);
+  setStatus('HTML + instructions copied for VS Code / Cursor.');
+}
+
+function downloadHtml() {
+  const { htmlSlice, tagName } = getInputs();
+  if (!htmlSlice) {
+    setStatus('Nothing to download.');
+    return;
+  }
+  const blob = new Blob([`<!doctype html><meta charset="utf-8"><title>${toKebabCase(tagName)}-slice</title>\n${htmlSlice}\n`], {
+    type: 'text/html'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${toKebabCase(tagName)}-slice.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('HTML slice downloaded.');
 }
 
 const dropZone = document.getElementById('dropZone');
@@ -224,7 +313,12 @@ dropZone.addEventListener('dragover', (event) => {
 dropZone.addEventListener('drop', (event) => {
   event.preventDefault();
   const raw = event.dataTransfer.getData('application/json') || '{}';
-  const attrs = JSON.parse(raw);
+  let attrs = {};
+  try {
+    attrs = JSON.parse(raw);
+  } catch {
+    attrs = {};
+  }
   const tagName = getInputs().tagName;
   snippet.textContent = renderSnippet(tagName, attrs);
   setStatus('Drop successful. Snippet generated below.');
@@ -234,5 +328,34 @@ document.getElementById('previewBtn').addEventListener('click', preview);
 document.getElementById('makeVariantBtn').addEventListener('click', addVariantCard);
 document.getElementById('downloadBtn').addEventListener('click', downloadJS);
 document.getElementById('copyBtn').addEventListener('click', () => {
-  copyJS().catch(() => setStatus('Clipboard copy failed.'));
+  copyJS().catch(() => setStatus('Clipboard copy failed — check extension permissions.'));
 });
+document.getElementById('pickBtn').addEventListener('click', () => {
+  pickOnActiveTab().catch(() => setStatus('Pick failed.'));
+});
+document.getElementById('copyHtmlBtn').addEventListener('click', () => {
+  copyHtml().catch(() => setStatus('Clipboard copy failed.'));
+});
+document.getElementById('copyForCursorBtn').addEventListener('click', () => {
+  copyForCursor().catch(() => setStatus('Clipboard copy failed.'));
+});
+document.getElementById('downloadHtmlBtn').addEventListener('click', downloadHtml);
+
+document.getElementById('portableCss').addEventListener('change', async (e) => {
+  await chrome.storage.local.set({ includePortableCss: e.target.checked });
+});
+
+document.getElementById('htmlSlice').addEventListener('blur', () => {
+  persistHtmlSlice().catch(() => {});
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.lastCaptureHtml) return;
+  const next = changes.lastCaptureHtml.newValue;
+  if (typeof next === 'string') {
+    document.getElementById('htmlSlice').value = next;
+    setStatus('New capture received from the page.');
+  }
+});
+
+loadFromStorage().catch(() => setStatus('Could not read saved capture.'));

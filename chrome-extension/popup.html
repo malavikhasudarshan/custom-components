@@ -5,60 +5,84 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Custom Components</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 12px; width: 380px; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; width: 400px; }
     h2 { margin-top: 0; font-size: 16px; }
-    label { display: block; font-size: 12px; margin: 8px 0 4px; }
-    textarea, input { width: 100%; box-sizing: border-box; }
-    textarea { min-height: 90px; resize: vertical; }
+    h3 { font-size: 13px; margin: 14px 0 6px; color: #1e293b; }
+    label { display: block; font-size: 12px; margin: 8px 0 4px; color: #334155; }
+    textarea, input[type="text"] { width: 100%; box-sizing: border-box; }
+    textarea { min-height: 110px; resize: vertical; font-family: ui-monospace, monospace; font-size: 11px; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    button { margin-top: 10px; margin-right: 6px; }
-    #previewFrame { margin-top: 10px; width: 100%; height: 160px; border: 1px dashed #888; border-radius: 8px; background: #fff; }
-    #status { margin-top: 8px; font-size: 12px; color: #444; }
+    button { margin-top: 8px; margin-right: 6px; cursor: pointer; }
+    .btn-primary { background: #4f46e5; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; font-weight: 600; }
+    .btn-secondary { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; }
+    #previewFrame { margin-top: 10px; width: 100%; height: 180px; border: 1px dashed #94a3b8; border-radius: 8px; background: #fff; }
+    #status { margin-top: 8px; font-size: 12px; color: #475569; line-height: 1.4; }
     #variants { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .variant-card { border: 1px solid #888; border-radius: 8px; padding: 6px; cursor: grab; font-size: 11px; }
-    #dropZone { margin-top: 10px; border: 2px dashed #777; border-radius: 8px; padding: 10px; }
-    #snippet { margin-top: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    .variant-card { border: 1px solid #94a3b8; border-radius: 8px; padding: 6px; cursor: grab; font-size: 11px; max-width: 100%; }
+    #dropZone { margin-top: 10px; border: 2px dashed #64748b; border-radius: 8px; padding: 10px; font-size: 12px; color: #475569; }
+    #snippet { margin-top: 6px; font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+    .hint { font-size: 11px; color: #64748b; margin: 6px 0 0; line-height: 1.35; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+    .checkbox-row input { width: auto; margin: 0; }
   </style>
 </head>
 <body>
-  <h2>Custom Components Studio</h2>
+  <h2>Custom Components</h2>
+  <p class="hint">Pick UI on any public <strong>https</strong> page, capture HTML (with optional portable CSS), then iterate or export for your editor.</p>
 
-  <label for="tagName">Custom element tag name</label>
-  <input id="tagName" value="demo-card" />
+  <h3>1 · Capture from the live page</h3>
+  <div class="checkbox-row">
+    <label><input type="checkbox" id="portableCss" checked /> Include portable CSS (computed layout &amp; colors on subtree)</label>
+  </div>
+  <div class="toolbar">
+    <button type="button" class="btn-primary" id="pickBtn">Pick element on this tab</button>
+  </div>
+  <p class="hint">After clicking, use the page: hover to highlight, <strong>click</strong> to capture, <strong>Esc</strong> to cancel. Keyboard: <strong>⌘⇧U</strong> (Mac) / <strong>Ctrl⇧U</strong> (Windows) — change under chrome://extensions → Keyboard shortcuts.</p>
 
-  <label for="htmlSlice">HTML slice (supports inline style + class rules in &lt;style&gt;)</label>
-  <textarea id="htmlSlice" placeholder="Paste a component slice, e.g. <style>.card{color:teal}</style><div class='card'>Hello</div>"></textarea>
+  <h3>2 · HTML slice</h3>
+  <label for="tagName">Custom element tag name (kebab-case)</label>
+  <input type="text" id="tagName" value="demo-card" spellcheck="false" />
 
+  <label for="htmlSlice">HTML (from picker, paste, or file)</label>
+  <textarea id="htmlSlice" placeholder="Captured markup appears here. You can paste &lt;nav&gt;… or a card with &lt;style&gt; rules."></textarea>
+
+  <div class="toolbar">
+    <button type="button" class="btn-secondary" id="copyHtmlBtn">Copy HTML</button>
+    <button type="button" class="btn-secondary" id="downloadHtmlBtn">Download .html</button>
+    <button type="button" class="btn-secondary" id="copyForCursorBtn">Copy for VS Code / Cursor</button>
+  </div>
+
+  <h3>3 · Tweak &amp; preview</h3>
   <div class="row">
     <div>
       <label for="color">color</label>
-      <input id="color" placeholder="blue" />
+      <input type="text" id="color" placeholder="blue" />
     </div>
     <div>
       <label for="fontSize">font-size</label>
-      <input id="fontSize" placeholder="16px" />
+      <input type="text" id="fontSize" placeholder="16px" />
     </div>
   </div>
-
   <div class="row">
     <div>
       <label for="borderRadius">border-radius</label>
-      <input id="borderRadius" placeholder="8px" />
+      <input type="text" id="borderRadius" placeholder="8px" />
     </div>
     <div>
       <label for="text">text</label>
-      <input id="text" placeholder="Hello" />
+      <input type="text" id="text" placeholder="Hello" />
     </div>
   </div>
 
-  <button id="previewBtn">Preview</button>
-  <button id="makeVariantBtn">Make Draggable Variant Card</button>
-  <button id="downloadBtn">Download JS</button>
-  <button id="copyBtn">Copy JS</button>
+  <button type="button" class="btn-secondary" id="previewBtn">Preview</button>
+  <button type="button" class="btn-secondary" id="makeVariantBtn">Make draggable variant card</button>
+  <button type="button" class="btn-secondary" id="downloadBtn">Download web component (.js)</button>
+  <button type="button" class="btn-secondary" id="copyBtn">Copy web component (.js)</button>
 
-  <iframe id="previewFrame" sandbox="allow-scripts"></iframe>
+  <iframe id="previewFrame" title="Preview" sandbox=""></iframe>
   <div id="variants"></div>
-  <div id="dropZone">Drop variant card here to generate insert snippet</div>
+  <div id="dropZone">Drop variant card here to build a snippet below</div>
   <div id="snippet"></div>
   <div id="status"></div>
 

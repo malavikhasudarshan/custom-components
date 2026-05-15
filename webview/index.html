@@ -5,27 +5,78 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Variant Studio</title>
   <style>
-    body { font-family: sans-serif; padding: 16px; }
+    body { font-family: sans-serif; padding: 16px; max-width: 1400px; margin: 0 auto; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .card { border: 1px solid #555; border-radius: 8px; padding: 8px; }
-    input { width: 100%; margin-bottom: 8px; }
-    #preview { border: 1px dashed #777; padding: 12px; min-height: 80px; }
+    input, textarea { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
+    #preview-wrap {
+      border: 1px dashed #777;
+      padding: 0;
+      min-height: 120px;
+      resize: vertical;
+      overflow: hidden;
+      max-height: 90vh;
+    }
+    #preview-frame {
+      width: 100%;
+      height: 360px;
+      border: 0;
+      display: block;
+      background: #fff;
+    }
     button { margin-right: 8px; margin-top: 6px; }
     #variants { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .variant-card { border: 1px solid #777; border-radius: 8px; padding: 8px; cursor: grab; min-width: 100px; }
+    .variant-card { border: 1px solid #777; border-radius: 8px; padding: 8px; cursor: grab; min-width: 100px; max-width: 220px; }
     .variant-card:focus { outline: 2px solid #4f46e5; outline-offset: 2px; }
-    .variant-card-preview { width: 100%; height: 60px; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; color: white; font-weight: 500; font-size: 12px; overflow: hidden; }
+    .variant-card-preview {
+      width: 100%;
+      height: 72px;
+      border-radius: 4px;
+      border: 0;
+      display: block;
+      margin-bottom: 6px;
+      background: #fff;
+      pointer-events: none;
+    }
     .variant-card-label { font-size: 11px; color: #666; }
     #drop-zone { margin-top: 10px; border: 2px dashed #666; border-radius: 8px; padding: 12px; }
+    #component-import-zone {
+      margin-bottom: 12px;
+      border: 2px dashed #4f46e5;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+    }
+    #component-import-zone.dragover { background: #eef2ff; border-color: #4338ca; }
+    #paste-html { min-height: 100px; font-family: monospace; font-size: 12px; }
     #snippet { margin-top: 6px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
-    #comparison { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    #comparison { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
     .comparison-item { border: 1px solid #ccc; border-radius: 6px; padding: 8px; background: #f9f9f9; }
     .comparison-item h4 { margin: 0 0 8px 0; font-size: 12px; }
-    .comparison-preview { border: 1px dashed #ccc; padding: 8px; min-height: 60px; background: white; }
+    .comparison-preview-wrap { border: 1px dashed #ccc; background: white; overflow: hidden; resize: vertical; min-height: 100px; max-height: 320px; }
+    .comparison-preview { width: 100%; height: 160px; border: 0; display: block; }
+    #import-status { font-size: 12px; min-height: 1.25em; margin-top: 6px; }
+    #preview-loading { font-size: 12px; color: #666; margin-bottom: 6px; display: none; }
   </style>
 </head>
 <body>
   <h2>Variant Studio</h2>
+
+  <div id="component-import-zone">
+    <h3 style="margin-top:0">Import heavy components</h3>
+    <p style="margin:0 0 8px 0; font-size: 13px; color: #444">
+      Drag a <strong>.html</strong> file (e.g. exported navbar) here, or paste markup below. Large fragments stay in an isolated preview iframe.
+    </p>
+    <label>Web component tag (kebab-case)
+      <input id="import-tag-name" type="text" value="custom-sliced-component" spellcheck="false" />
+    </label>
+    <label>Paste HTML / JSX fragment
+      <textarea id="paste-html" placeholder="Paste &lt;nav&gt;…&lt;/nav&gt;, a component tree, or a full snippet including &lt;style&gt; if needed."></textarea>
+    </label>
+    <button type="button" id="load-paste-btn">Load pasted HTML</button>
+    <div id="import-status" aria-live="polite"></div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <h3>Attributes</h3>
@@ -35,13 +86,17 @@
         <label>Border Radius <input id="border-radius" placeholder="e.g. 12px" data-prop-input="border-radius" /></label>
         <label>Text <input id="text" placeholder="override text" data-prop-input="text" /></label>
       </div>
-      <button id="preview-btn">Preview</button>
-      <button id="make-variant-btn">Make Draggable Variant Card</button>
-      <button id="compare-btn" style="margin-top: 6px; background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">+ Add to Comparison</button>
+      <button type="button" id="preview-btn">Preview</button>
+      <p style="font-size:11px;color:#666;margin:8px 0 0 0">Edits debounce (~400ms) for large components.</p>
+      <button type="button" id="make-variant-btn">Make Draggable Variant Card</button>
+      <button type="button" id="compare-btn" style="margin-top: 6px; background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">+ Add to Comparison</button>
     </div>
     <div class="card">
       <h3>Preview</h3>
-      <div id="preview"></div>
+      <div id="preview-loading">Updating preview…</div>
+      <div id="preview-wrap">
+        <iframe id="preview-frame" title="Component preview" sandbox=""></iframe>
+      </div>
       <div id="variants"></div>
       <div id="drop-zone">Drop variant card here to generate and insert snippet</div>
       <div id="snippet"></div>
@@ -50,25 +105,39 @@
 
   <div id="comparison-section" style="margin-top: 16px; display: none;">
     <h3>Side-by-side Comparison</h3>
-    <button id="clear-comparison" style="margin-bottom: 8px; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Clear Comparison</button>
+    <button type="button" id="clear-comparison" style="margin-bottom: 8px; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Clear Comparison</button>
     <div id="comparison"></div>
   </div>
 
   <script>
     const vscode = acquireVsCodeApi();
-    const previewBox = document.getElementById('preview');
+    const previewFrame = document.getElementById('preview-frame');
+    const previewLoading = document.getElementById('preview-loading');
     const variantsBox = document.getElementById('variants');
     const dropZone = document.getElementById('drop-zone');
     const snippetBox = document.getElementById('snippet');
     const comparisonBox = document.getElementById('comparison');
     const comparisonSection = document.getElementById('comparison-section');
+    const componentImportZone = document.getElementById('component-import-zone');
+    const pasteHtml = document.getElementById('paste-html');
+    const importTagName = document.getElementById('import-tag-name');
+    const importStatus = document.getElementById('import-status');
+    const attributesContainer = document.getElementById('attributes-container');
 
     let currentTemplate = null;
     let comparisonVariants = [];
+    let lastPreviewHtml = '';
+    let previewDebounceTimer = null;
+    let previewGeneration = 0;
+
+    function setImportStatus(text, color) {
+      importStatus.textContent = text || '';
+      importStatus.style.color = color || '#374151';
+    }
 
     function attrsFromInputs() {
       const attrs = {};
-      document.querySelectorAll('[data-prop-input]').forEach(input => {
+      document.querySelectorAll('[data-prop-input]').forEach((input) => {
         const propName = input.getAttribute('data-prop-input');
         const value = input.value.trim();
         if (value) {
@@ -78,10 +147,19 @@
       return attrs;
     }
 
+    function setPreviewHtml(html) {
+      lastPreviewHtml = html || '';
+      const doc =
+        lastPreviewHtml.trim().length > 0
+          ? lastPreviewHtml
+          : '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;font-family:sans-serif;padding:12px;color:#666">No preview yet. Import or slice a component, then preview.</body></html>';
+      previewFrame.srcdoc = doc;
+    }
+
     function renderSnippet(attrs, tagName) {
       const attrString = Object.entries(attrs)
         .filter(([, v]) => v)
-        .map(([k, v]) => `${k}="${v}"`)
+        .map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`)
         .join(' ');
       return `<${tagName}${attrString ? ` ${attrString}` : ''}></${tagName}>`;
     }
@@ -92,9 +170,27 @@
       vscode.postMessage({ type: 'insertSnippet', payload: attrs });
     }
 
-    // Dynamically build inputs for all detected properties
+    function schedulePreview(immediate) {
+      clearTimeout(previewDebounceTimer);
+      const run = () => {
+        previewGeneration += 1;
+        const gen = previewGeneration;
+        previewLoading.style.display = 'block';
+        vscode.postMessage({ type: 'preview', payload: attrsFromInputs() });
+        window.setTimeout(() => {
+          if (gen === previewGeneration) {
+            previewLoading.style.display = 'none';
+          }
+        }, 15000);
+      };
+      if (immediate) {
+        run();
+      } else {
+        previewDebounceTimer = window.setTimeout(run, 400);
+      }
+    }
+
     function renderPropertyInputs(template) {
-      const attributesContainer = document.getElementById('attributes-container');
       attributesContainer.innerHTML = '';
 
       if (!template || !template.schema || !template.schema.attributes) {
@@ -102,18 +198,20 @@
         return;
       }
 
-      template.schema.attributes.forEach(attr => {
+      template.schema.attributes.forEach((attr) => {
         const label = document.createElement('label');
         const input = document.createElement('input');
         input.type = 'text';
         input.placeholder = `e.g. ${attr.defaultValue || 'value'}`;
         input.setAttribute('data-prop-input', attr.name);
-        
+
         label.textContent = `${attr.name} `;
         label.appendChild(input);
         attributesContainer.appendChild(label);
       });
     }
+
+    attributesContainer.addEventListener('input', () => schedulePreview(false));
 
     function updateComparison() {
       if (comparisonVariants.length === 0) {
@@ -126,9 +224,17 @@
           item.className = 'comparison-item';
           const title = document.createElement('h4');
           title.textContent = `Variant ${idx + 1}`;
-          const preview = document.createElement('div');
-          preview.className = 'comparison-preview';
-          preview.innerHTML = variant.preview;
+          const wrap = document.createElement('div');
+          wrap.className = 'comparison-preview-wrap';
+          const iframe = document.createElement('iframe');
+          iframe.className = 'comparison-preview';
+          iframe.sandbox = '';
+          iframe.title = `Comparison ${idx + 1}`;
+          iframe.srcdoc =
+            variant.html && variant.html.trim().length > 0
+              ? variant.html
+              : '<!DOCTYPE html><html><body style="margin:0;font-family:sans-serif;font-size:12px;padding:8px">No preview HTML captured. Click Preview, then add to comparison.</body></html>';
+          wrap.appendChild(iframe);
           const code = document.createElement('small');
           code.style.display = 'block';
           code.style.marginTop = '8px';
@@ -142,9 +248,10 @@
             .map(([k, v]) => `${k}="${v}"`)
             .join(' ');
           item.appendChild(title);
-          item.appendChild(preview);
+          item.appendChild(wrap);
           item.appendChild(code);
           const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
           removeBtn.textContent = '✕ Remove';
           removeBtn.style.marginTop = '6px';
           removeBtn.style.width = '100%';
@@ -164,19 +271,13 @@
       }
     }
 
-    document.getElementById('preview-btn').addEventListener('click', () => {
-      vscode.postMessage({ type: 'preview', payload: attrsFromInputs() });
-    });
+    document.getElementById('preview-btn').addEventListener('click', () => schedulePreview(true));
 
     document.getElementById('compare-btn').addEventListener('click', () => {
       const attrs = attrsFromInputs();
-      const tagName = (currentTemplate && currentTemplate.tagName) || 'custom-sliced-component';
-      // Create a temporary preview
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = previewBox.innerHTML;
       comparisonVariants.push({
         attrs,
-        preview: previewBox.innerHTML
+        html: lastPreviewHtml
       });
       updateComparison();
     });
@@ -188,61 +289,48 @@
 
     document.getElementById('make-variant-btn').addEventListener('click', () => {
       const attrs = attrsFromInputs();
-      
-      // Safely create the card object with proper escaping
-      const safeAttrs = {};
-      Object.entries(attrs).forEach(([k, v]) => {
-        // Escape special characters in values
-        safeAttrs[k] = String(v).replace(/"/g, '\\"').replace(/\n/g, '\\n');
-      });
-      
+
       const card = document.createElement('div');
       card.className = 'variant-card';
       card.draggable = true;
       card.tabIndex = 0;
-      
-      // Create a visual preview of the variant
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'variant-card-preview';
-      
-      // Generate a preview style based on the attributes
-      let previewStyle = '';
-      Object.entries(safeAttrs).forEach(([k, v]) => {
-        if (k !== 'text' && v) {
-          previewStyle += `${k}: ${v}; `;
-        }
-      });
-      
-      previewDiv.style.cssText = previewStyle || 'background: #ccc;';
-      previewDiv.textContent = safeAttrs.text || 'Preview';
-      
-      // Create the label showing which properties changed
+
+      const mini = document.createElement('iframe');
+      mini.className = 'variant-card-preview';
+      mini.sandbox = '';
+      mini.srcdoc =
+        lastPreviewHtml.trim().length > 0
+          ? lastPreviewHtml
+          : '<!DOCTYPE html><html><body style="margin:0;font-family:sans-serif;font-size:12px;display:flex;align-items:center;justify-content:center;height:100%">Preview first for a visual snapshot</body></html>';
+
       const labelDiv = document.createElement('div');
       labelDiv.className = 'variant-card-label';
-      const changedPropsCount = Object.values(safeAttrs).filter(v => v).length;
-      labelDiv.textContent = `${changedPropsCount} properties`;
-      
-      card.appendChild(previewDiv);
+      const changedPropsCount = Object.values(attrs).filter((v) => v).length;
+      labelDiv.textContent = `${changedPropsCount} propert${changedPropsCount === 1 ? 'y' : 'ies'}`;
+
+      card.appendChild(mini);
       card.appendChild(labelDiv);
-      
-      // Store the original (unescaped) attributes for insertion
+
       card.dataset.attrs = JSON.stringify(attrs);
-      card.title = `Click to insert: ${Object.entries(attrs).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(', ')}`;
-      
+      card.title = `Click to insert: ${Object.entries(attrs)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`;
+
       card.addEventListener('dragstart', (event) => {
         event.dataTransfer.effectAllowed = 'copy';
         event.dataTransfer.setData('application/json', card.dataset.attrs || '{}');
       });
-      
+
       card.addEventListener('click', () => insertVariant(attrs));
-      
+
       card.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           insertVariant(attrs);
         }
       });
-      
+
       variantsBox.appendChild(card);
     });
 
@@ -253,8 +341,60 @@
     dropZone.addEventListener('drop', (event) => {
       event.preventDefault();
       const raw = event.dataTransfer.getData('application/json') || '{}';
-      const attrs = JSON.parse(raw);
+      let attrs = {};
+      try {
+        attrs = JSON.parse(raw);
+      } catch {
+        attrs = {};
+      }
       insertVariant(attrs);
+    });
+
+    function postImportHtml(html) {
+      const tag = (importTagName.value || '').trim() || 'custom-sliced-component';
+      setImportStatus('Importing…', '#4b5563');
+      vscode.postMessage({ type: 'importHtml', payload: { html, tagName: tag } });
+    }
+
+    document.getElementById('load-paste-btn').addEventListener('click', () => {
+      postImportHtml(pasteHtml.value || '');
+    });
+
+    ['dragenter', 'dragover'].forEach((evt) => {
+      componentImportZone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        componentImportZone.classList.add('dragover');
+      });
+    });
+
+    componentImportZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      componentImportZone.classList.remove('dragover');
+    });
+
+    componentImportZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      componentImportZone.classList.remove('dragover');
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) {
+        setImportStatus('Drop an HTML file, or use the paste area.', '#b45309');
+        return;
+      }
+      const name = file.name || '';
+      if (!/\.html?$/i.test(name)) {
+        setImportStatus('Please drop an .html or .htm file.', '#b45309');
+        return;
+      }
+      try {
+        const text = await file.text();
+        pasteHtml.value = text;
+        postImportHtml(text);
+      } catch (err) {
+        setImportStatus(`Could not read file: ${err && err.message ? err.message : String(err)}`, '#b91c1c');
+      }
     });
 
     window.addEventListener('message', (event) => {
@@ -262,16 +402,30 @@
       if (message.type === 'state') {
         currentTemplate = message.payload || null;
         if (!message.payload) {
-          previewBox.textContent = 'No sliced component yet. Run CustomComponents: Slice Selection first.';
+          setPreviewHtml('');
+          attributesContainer.innerHTML =
+            '<p>No sliced component yet. Run <strong>Slice Selection</strong> or import HTML above.</p>';
         } else {
           renderPropertyInputs(message.payload);
+          schedulePreview(true);
+        }
+      }
+      if (message.type === 'importResult') {
+        const p = message.payload || {};
+        if (!p.ok) {
+          setImportStatus(p.error || 'Import failed.', '#b91c1c');
+        } else {
+          const w = typeof p.warningCount === 'number' ? p.warningCount : 0;
+          setImportStatus(`Imported successfully (${w} warning(s)).`, '#15803d');
         }
       }
       if (message.type === 'previewResult') {
-        previewBox.innerHTML = message.payload.html;
+        previewLoading.style.display = 'none';
+        setPreviewHtml(message.payload && message.payload.html);
       }
     });
 
+    setPreviewHtml('');
     vscode.postMessage({ type: 'ready' });
   </script>
 </body>
