@@ -1,4 +1,5 @@
-# custom-components
-**cs294: designing user-centered programming languages** final project
+# Custom Components (CC)
+**CS294: Designing User-Centered Programming Languages**
+**Final Project**
 
 Abigail Brooks-Ramirez, Souradeep Das, Malavikha Sudarshan
