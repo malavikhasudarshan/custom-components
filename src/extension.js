@@ -3,10 +3,12 @@ const { component_slicer } = require('./slicer/componentSlicer');
 const { toWebComponent } = require('./transform/toWebComponent');
 const { openVariantStudio } = require('./webview/variantStudio');
 const { saveLibraryItem, listLibraryItems } = require('./library/store');
+const { getMissingModuleScriptInsertion } = require('./library/moduleImport');
 
 const state = {
   lastSlice: null,
   lastTemplate: null,
+  lastSavedMetadata: null,
   lastEditorUri: null,
   lastSelectionEnd: null,
   async insertVariantSnippet(vscode, attrs) {
@@ -22,6 +24,7 @@ const state = {
 
     if (targetUri && targetPosition) {
       const edit = new vscode.WorkspaceEdit();
+      await addModuleImportEdit(vscode, edit, targetUri, this.lastSavedMetadata);
       edit.insert(targetUri, targetPosition, snippet);
       await vscode.workspace.applyEdit(edit);
       return true;
@@ -32,13 +35,27 @@ const state = {
       return false;
     }
 
-    await editor.edit((editBuilder) => {
-      editBuilder.insert(editor.selection.active, snippet);
-    });
+    const edit = new vscode.WorkspaceEdit();
+    await addModuleImportEdit(vscode, edit, editor.document.uri, this.lastSavedMetadata);
+    edit.insert(editor.document.uri, editor.selection.active, snippet);
+    await vscode.workspace.applyEdit(edit);
 
     return true;
   }
 };
+
+async function addModuleImportEdit(vscode, edit, targetUri, metadata) {
+  if (!metadata || !metadata.generatedPath || !targetUri || targetUri.scheme !== 'file') {
+    return false;
+  }
+
+  const document = await vscode.workspace.openTextDocument(targetUri);
+  const insertion = getMissingModuleScriptInsertion(document.getText(), targetUri.fsPath, metadata.generatedPath);
+  if (!insertion) return false;
+
+  edit.insert(targetUri, document.positionAt(insertion.offset), insertion.text);
+  return true;
+}
 
 function getWorkspacePath() {
   const workspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
@@ -103,6 +120,7 @@ async function saveToLibraryCommand() {
   if (!itemName) return;
 
   const metadata = saveLibraryItem(workspacePath, itemName, state.lastTemplate);
+  state.lastSavedMetadata = metadata;
   vscode.window.showInformationMessage(`Saved ${metadata.name} to component library.`);
 }
 
@@ -132,9 +150,10 @@ async function quickInsertCommand() {
 
   if (!picked) return;
 
-  await editor.edit((editBuilder) => {
-    editBuilder.insert(editor.selection.active, `<${picked.item.tagName}></${picked.item.tagName}>`);
-  });
+  const edit = new vscode.WorkspaceEdit();
+  await addModuleImportEdit(vscode, edit, editor.document.uri, picked.item);
+  edit.insert(editor.document.uri, editor.selection.active, `<${picked.item.tagName}></${picked.item.tagName}>`);
+  await vscode.workspace.applyEdit(edit);
 }
 
 function activate(context) {
