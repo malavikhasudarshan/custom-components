@@ -40,6 +40,6 @@ chrome.commands.onCommand.addListener(async (command) => {
   } catch {
     chrome.action.setBadgeText({ tabId: tab.id, text: '!' });
     chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: '#b45309' });
-    setTimeout(() => chrome.action.setBadgeText({ tabId: tab.id, text: ''), 5000);
+    setTimeout(() => chrome.action.setBadgeText({ tabId: tab.id, text: '' }), 5000);
   }
 });

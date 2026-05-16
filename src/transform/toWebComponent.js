@@ -15,13 +15,19 @@ function toClassName(tagName) {
 
 function makeRenderableTemplate(htmlFragment, attributeDefaults) {
   let template = htmlFragment;
+  const placeholders = {};
+  let placeholderIndex = 0;
 
   Object.entries(attributeDefaults).forEach(([key, value]) => {
+    if (!value) return;
     const escaped = String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    template = template.replace(new RegExp(escaped, 'g'), `\${this.getAttribute('${key}') ?? '${value}'}`);
+    const placeholder = `__CC_ATTR_${placeholderIndex}__`;
+    placeholderIndex += 1;
+    placeholders[key] = placeholder;
+    template = template.replace(new RegExp(escaped, 'g'), placeholder);
   });
 
-  return template;
+  return { template, placeholders };
 }
 
 function toWebComponent(sliceResult, options = {}) {
@@ -45,7 +51,10 @@ function toWebComponent(sliceResult, options = {}) {
   });
 
   const observedAttributes = Object.keys(attributeDefaults);
-  const renderableTemplate = makeRenderableTemplate(sliceResult.htmlFragment, attributeDefaults);
+  const { template: renderableTemplate, placeholders } = makeRenderableTemplate(
+    sliceResult.htmlFragment,
+    attributeDefaults
+  );
 
   const source = `class ${className} extends HTMLElement {
   static get observedAttributes() {
@@ -53,6 +62,9 @@ function toWebComponent(sliceResult, options = {}) {
   }
 
   connectedCallback() {
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: 'open' });
+    }
     this.render();
   }
 
@@ -61,7 +73,15 @@ function toWebComponent(sliceResult, options = {}) {
   }
 
   render() {
-    this.innerHTML = \`${renderableTemplate}\`;
+    let html = ${JSON.stringify(renderableTemplate)};
+    const defaults = ${JSON.stringify(attributeDefaults)};
+    const placeholders = ${JSON.stringify(placeholders)};
+
+    for (const [name, placeholder] of Object.entries(placeholders)) {
+      html = html.split(placeholder).join(this.getAttribute(name) ?? defaults[name] ?? '');
+    }
+
+    this.shadowRoot.innerHTML = html;
   }
 }
 
